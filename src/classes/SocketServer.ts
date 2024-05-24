@@ -34,7 +34,7 @@ export class SocketServer {
 						: 'https://gateway-chat.tnfangel.com'
 				],
 				methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-				credentials: true
+				credentials: false
 			},
 			transports: ['polling', 'websocket' /*'webtransport'*/],
 			pingInterval: 3000
