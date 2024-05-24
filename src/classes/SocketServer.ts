@@ -1,4 +1,3 @@
-import http from 'http';
 import { Server, Socket } from 'socket.io';
 import { ClientConnection } from './ClientConnection';
 import type { IRawChannel } from '../types/interfaces/Channel';
@@ -7,8 +6,6 @@ import type { IRawUser } from '../types/interfaces/User';
 
 export class SocketServer {
 	private io: Server;
-	private port: number;
-	private http: http.Server;
 
 	public connectedClients = new Map<string, string[]>();
 	public cache = {
@@ -19,12 +16,9 @@ export class SocketServer {
 	} as const;
 
 	public constructor() {
-		this.http = http.createServer((_req, res) => {
-			res.writeHead(404);
-			res.end();
-		});
+		const port = parseInt(process.env['PORT'] ?? '4001');
 
-		this.io = new Server(this.http, {
+		this.io = new Server(port, {
 			path: '/gateway/',
 			serveClient: false,
 			cors: {
@@ -34,30 +28,32 @@ export class SocketServer {
 						: 'https://gateway-chat.tnfangel.com'
 				],
 				methods: ['GET', 'POST', 'PATCH', 'DELETE'],
-				credentials: true
+				credentials: false
 			},
 			transports: ['polling', 'websocket' /*'webtransport'*/],
 			pingInterval: 3000
 		});
 
-		this.port = parseInt(process.env['PORT'] ?? '4001');
+		console.log('Listening to port', port);
 	}
 
 	public async setup() {
 		this.io.use(this.authenticateMW).on('connection', this.createConnection);
-
-		this.listen();
 	}
 
 	private async authenticateMW(socket: Socket, next: (err?: any) => void) {
 		if (socket.handshake.auth?.['token']) {
-			const token = socket.handshake.auth['token'];
+			const token = socket.handshake.auth['token'] as string;
 
-			if (!token.includes('.')) return next(new Error('Malformed Token'));
+			if (!token || typeof token !== 'string') next(new Error('Authentication error'));
 
-			if (token.split('.').length !== 3) return next(new Error('Malformed Token'));
+			const splittedToken = token.split('.');
 
-			const user = token.split('.')[0];
+			if (splittedToken.length !== 3) return next(new Error('Malformed Token'));
+
+			if (splittedToken.some((c) => !c)) return next(new Error('Malformed Token'));
+
+			const user = splittedToken[0];
 
 			if (!user) return next(new Error('Malformed Token'));
 
@@ -79,11 +75,5 @@ export class SocketServer {
 		console.log('Connection:', socket.id, authType);
 
 		await new ClientConnection(this, socket).create();
-	}
-
-	private listen() {
-		this.http.listen(this.port, () => {
-			console.log('Listening on port', this.port);
-		});
 	}
 }
